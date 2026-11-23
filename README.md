@@ -1,10 +1,13 @@
 # Retinal Disease Detection Using Deep Learning on OCT Images
 
+[![CI](https://github.com/Rajuzet/RDD-DL/actions/workflows/ci.yml/badge.svg)](https://github.com/Rajuzet/RDD-DL/actions)
 [![Python](https://img.shields.io/badge/Python-3.11%2B-blue.svg?logo=python&logoColor=white)](https://www.python.org/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.x-EE4C2C.svg?logo=pytorch&logoColor=white)](https://pytorch.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.100%2B-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.28%2B-FF4B4B.svg?logo=streamlit&logoColor=white)](https://streamlit.io/)
+[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg?logo=docker&logoColor=white)](https://www.docker.com/)
 [![Code Style](https://img.shields.io/badge/code%20style-PEP%208-green.svg)](https://peps.python.org/pep-0008/)
-[![Tests](https://img.shields.io/badge/Tests-Passing%20(10%2F10)-brightgreen.svg)](#testing--verification)
+[![Tests](https://img.shields.io/badge/Tests-Passing%20(13%2F13)-brightgreen.svg)](#testing--verification)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 An enterprise-grade, clinical-decision-support deep learning pipeline and interactive web application for automated detection, classification, and explainability of retinal abnormalities from **Optical Coherence Tomography (OCT)** images.
@@ -221,6 +224,25 @@ streamlit run app/streamlit_app.py
 ```
 
 The app will open automatically in your browser at `http://localhost:8501`.
+
+### 6. Launch Production REST API Microservice (FastAPI)
+
+For headless EHR/PACS inference integration:
+
+```bash
+uvicorn app.api:app --host 0.0.0.0 --port 8000 --reload
+```
+
+* Interactive Swagger API Documentation: `http://localhost:8000/docs`
+* ReDoc Alternative: `http://localhost:8000/redoc`
+
+### 7. Run with Docker & Docker Compose
+
+Deploy the complete stack (Streamlit Studio + FastAPI Microservice) with a single command:
+
+```bash
+docker compose up --build
+```
 
 ---
 

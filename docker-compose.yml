@@ -1,0 +1,27 @@
+version: "3.8"
+
+services:
+  oct-streamlit:
+    build: .
+    container_name: rdd_streamlit_app
+    ports:
+      - "8501:8501"
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data
+      - ./reports:/app/reports
+    environment:
+      - PYTHONUNBUFFERED=1
+
+  oct-api:
+    build: .
+    container_name: rdd_fastapi_service
+    command: ["uvicorn", "app.api:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data
+      - ./reports:/app/reports
+    environment:
+      - PYTHONUNBUFFERED=1
