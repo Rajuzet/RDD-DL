@@ -1,0 +1,57 @@
+[
+    {
+        "Model": "custom_cnn",
+        "Parameters (M)": 0.42,
+        "Trainable Params (M)": 0.42,
+        "Accuracy (%)": 33.33,
+        "Precision (Weighted)": 0.1111,
+        "Recall (Weighted)": 0.3333,
+        "F1-Score (Weighted)": 0.1667,
+        "Latency (ms/img)": 79.5,
+        "Checkpoint": "best_custom_cnn.pt"
+    },
+    {
+        "Model": "resnet18",
+        "Parameters (M)": 11.18,
+        "Trainable Params (M)": 11.18,
+        "Accuracy (%)": 0.0,
+        "Precision (Weighted)": 0.0,
+        "Recall (Weighted)": 0.0,
+        "F1-Score (Weighted)": 0.0,
+        "Latency (ms/img)": 167.25,
+        "Checkpoint": "best_resnet18.pt"
+    },
+    {
+        "Model": "vgg16",
+        "Parameters (M)": 134.28,
+        "Trainable Params (M)": 134.28,
+        "Accuracy (%)": 100.0,
+        "Precision (Weighted)": 1.0,
+        "Recall (Weighted)": 1.0,
+        "F1-Score (Weighted)": 1.0,
+        "Latency (ms/img)": 1282.32,
+        "Checkpoint": "best_vgg16.pt"
+    },
+    {
+        "Model": "mobilenetv2",
+        "Parameters (M)": 2.23,
+        "Trainable Params (M)": 2.23,
+        "Accuracy (%)": 33.33,
+        "Precision (Weighted)": 0.1111,
+        "Recall (Weighted)": 0.3333,
+        "F1-Score (Weighted)": 0.1667,
+        "Latency (ms/img)": 82.69,
+        "Checkpoint": "best_mobilenetv2.pt"
+    },
+    {
+        "Model": "densenet121",
+        "Parameters (M)": 6.96,
+        "Trainable Params (M)": 6.96,
+        "Accuracy (%)": 33.33,
+        "Precision (Weighted)": 0.1111,
+        "Recall (Weighted)": 0.3333,
+        "F1-Score (Weighted)": 0.1667,
+        "Latency (ms/img)": 381.33,
+        "Checkpoint": "best_densenet121.pt"
+    }
+]

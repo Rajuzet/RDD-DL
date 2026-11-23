@@ -1,0 +1,6 @@
+Model,Parameters (M),Trainable Params (M),Accuracy (%),Precision (Weighted),Recall (Weighted),F1-Score (Weighted),Latency (ms/img),Checkpoint
+custom_cnn,0.42,0.42,33.33,0.1111,0.3333,0.1667,79.5,best_custom_cnn.pt
+resnet18,11.18,11.18,0.0,0.0,0.0,0.0,167.25,best_resnet18.pt
+vgg16,134.28,134.28,100.0,1.0,1.0,1.0,1282.32,best_vgg16.pt
+mobilenetv2,2.23,2.23,33.33,0.1111,0.3333,0.1667,82.69,best_mobilenetv2.pt
+densenet121,6.96,6.96,33.33,0.1111,0.3333,0.1667,381.33,best_densenet121.pt
