@@ -19,11 +19,18 @@ import torch.nn.functional as F
 from torchvision import transforms
 
 from src.config import config
+from src.compliance.audit_trail import AuditTrailLogger
+from src.compliance.calibration import ClinicalCalibrator
 from src.explainability.gradcam import GradCAM
 from src.models.model_factory import build_model, count_parameters
+from src.quality.image_quality_assessment import ImageQualityAssessor
 from src.utils.logger import setup_logger
 
 logger = setup_logger("RDD-DL.API")
+
+iqa_assessor = ImageQualityAssessor()
+calibrator = ClinicalCalibrator(temperature=1.15)
+audit_logger = AuditTrailLogger()
 
 app = FastAPI(
     title="Retinal Disease Detection (RDD-DL) Clinical API",
@@ -66,10 +73,14 @@ class ClassProbability(BaseModel):
 
 class PredictionResponse(BaseModel):
     model: str
+    iqa_status: str
+    iqa_score: float
     predicted_class: str
     confidence: float
     description: str
     probabilities: List[ClassProbability]
+    urgent_referral_flag: bool
+    audit_id: str
     inference_time_ms: float
     statutory_disclaimer: str
 
@@ -98,6 +109,7 @@ async def predict_oct_scan(
 ):
     """
     Submits an OCT scan B-scan (PNG/JPEG) for automated diagnostic classification.
+    Runs pre-analytical Image Quality Assessment (IQA) and Temperature Calibration.
     """
     start_time = time.time()
     try:
@@ -105,6 +117,20 @@ async def predict_oct_scan(
         pil_img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid image file: {str(e)}")
+
+    # Pre-analytical Image Quality Assessment Gate (FDA CADe Requirement)
+    iqa_result = iqa_assessor.evaluate(pil_img)
+    if not iqa_result.is_gradable:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "UNGRADABLE_IMAGE",
+                "message": "Image failed FDA SaMD clinical acceptance criteria.",
+                "quality_score": iqa_result.quality_score,
+                "failure_reasons": iqa_result.failure_reasons,
+                "recommendation": iqa_result.recommendation
+            }
+        )
 
     tf = transforms.Compose([
         transforms.Resize((config.image_size, config.image_size)),
@@ -115,12 +141,29 @@ async def predict_oct_scan(
 
     model, _ = get_or_load_model(model_name)
     with torch.no_grad():
-        logits = model(input_tensor)
-        probs = F.softmax(logits, dim=1).cpu().numpy()[0]
+        logits = model(input_tensor).cpu().numpy()[0]
 
+    # Temperature Scaling Calibration
+    probs = calibrator.calibrate_logits(logits)
     pred_idx = int(np.argmax(probs))
     pred_label = config.classes[pred_idx]
     confidence_pct = float(probs[pred_idx]) * 100.0
+
+    prob_dict = {cls_name: float(prob_val) for cls_name, prob_val in zip(config.classes, probs)}
+    triage_check = calibrator.check_high_sensitivity_referral(probs, config.classes)
+
+    # 21 CFR Part 11 Audit Trail Logging
+    audit_rec = audit_logger.record_inference(
+        image_bytes=image_bytes,
+        model_name=model_name,
+        iqa_status=iqa_result.status,
+        iqa_score=iqa_result.quality_score,
+        prediction=pred_label,
+        confidence=confidence_pct,
+        probabilities=prob_dict,
+        urgent_flag=triage_check["requires_urgent_retinal_referral"],
+        operator_id="API_CLIENT"
+    )
 
     prob_list = [
         ClassProbability(category=cls_name, probability=round(float(prob_val), 4))
@@ -131,10 +174,14 @@ async def predict_oct_scan(
 
     return PredictionResponse(
         model=model_name,
+        iqa_status=iqa_result.status,
+        iqa_score=iqa_result.quality_score,
         predicted_class=pred_label,
         confidence=round(confidence_pct, 2),
         description=config.class_descriptions[pred_label],
         probabilities=prob_list,
+        urgent_referral_flag=triage_check["requires_urgent_retinal_referral"],
+        audit_id=audit_rec.audit_id,
         inference_time_ms=duration_ms,
         statutory_disclaimer="RESEARCH PROTOTYPE ONLY - NOT FOR DIRECT CLINICAL DIAGNOSIS."
     )

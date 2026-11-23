@@ -3,6 +3,7 @@ Retinal OCT Disease Detection & Explainability Studio
 Production Streamlit Application for Clinical Decision Support Prototyping.
 """
 
+import json
 from pathlib import Path
 import cv2
 import numpy as np
@@ -14,8 +15,11 @@ import torch.nn.functional as F
 from torchvision import transforms
 
 from src.config import config
+from src.compliance.audit_trail import AuditTrailLogger
+from src.compliance.calibration import ClinicalCalibrator
 from src.explainability.gradcam import GradCAM
 from src.models.model_factory import build_model, count_parameters
+from src.quality.image_quality_assessment import ImageQualityAssessor
 
 
 st.set_page_config(
@@ -138,20 +142,25 @@ st.markdown('<div class="main-header">Retinal OCT Disease Detection & Explainabi
 st.markdown('<div class="sub-header">Deep Learning Screening for CNV, Diabetic Macular Edema, Drusen, and Normal Retinal Scans</div>', unsafe_allow_html=True)
 
 # Main Navigation Tabs
-tab_predict, tab_benchmark, tab_pathology, tab_system = st.tabs([
+tab_predict, tab_benchmark, tab_pathology, tab_compliance, tab_system = st.tabs([
     "🔬 Diagnostic Inference",
     "📊 Model Benchmarks",
     "📖 Clinical Pathology Guide",
+    "🛡️ FDA SaMD & Audit Trail",
     "⚙️ System Architecture"
 ])
 
 model, gradcam = load_oct_model(selected_model_name)
+iqa_assessor = ImageQualityAssessor()
+calibrator = ClinicalCalibrator(temperature=1.15)
+audit_logger = AuditTrailLogger()
 
 with tab_predict:
     col_input, col_pred = st.columns([1, 1], gap="large")
     
     active_image = None
     image_source_label = ""
+    raw_image_bytes = None
     
     with col_input:
         st.subheader("1. Input Retinal OCT Scan")
@@ -161,11 +170,14 @@ with tab_predict:
         )
         
         if uploaded_file is not None:
+            raw_image_bytes = uploaded_file.getvalue()
             active_image = Image.open(uploaded_file).convert("RGB")
             image_source_label = f"Uploaded File: {uploaded_file.name}"
         elif selected_sample != "None (Upload Custom)":
             sample_idx = sample_options.index(selected_sample) - 1
             sample_path = sample_files[sample_idx]
+            with open(sample_path, "rb") as f:
+                raw_image_bytes = f.read()
             active_image = Image.open(sample_path).convert("RGB")
             image_source_label = f"Sample: {sample_path.parent.name} / {sample_path.name}"
             
@@ -173,55 +185,96 @@ with tab_predict:
             st.image(active_image, caption=image_source_label, use_column_width=True)
             w, h = active_image.size
             st.caption(f"Dimensions: {w} × {h} pixels | Channels: 3 (RGB)")
+            
+            # --- FDA CADe / SaMD Image Quality Assessment Gate ---
+            iqa_result = iqa_assessor.evaluate(active_image)
+            st.markdown("---")
+            st.markdown("##### 🛡️ Clinical Acceptance Criteria (Image Quality Gate)")
+            if iqa_result.is_gradable:
+                st.success(f"**Status: GRADABLE** | Quality Score: **{iqa_result.quality_score} / 100**")
+                with st.expander("View Quality Assessment Metrics"):
+                    st.json(iqa_result.metrics)
+            else:
+                st.error(f"**Status: UNGRADABLE (REJECTED)** | Score: **{iqa_result.quality_score} / 100**")
+                for r in iqa_result.failure_reasons:
+                    st.warning(f"⚠️ {r}")
+                st.info(f"💡 {iqa_result.recommendation}")
         else:
             st.info("👆 Please upload an OCT cross-section image or pick a curated sample from the sidebar.")
 
     with col_pred:
         st.subheader("2. Diagnostic Analysis & Explainability")
         if active_image is not None:
-            input_tensor = preprocess_image(active_image)
-            
-            # Prediction
-            with torch.no_grad():
-                logits = model(input_tensor)
-                probs = F.softmax(logits, dim=1).cpu().numpy()[0]
+            if not iqa_result.is_gradable:
+                st.error("⛔ **Diagnostic inference suspended:** Scan failed pre-analytical image quality criteria. In compliance with FDA SaMD guidelines, ungradable images cannot be evaluated to prevent false reassurance.")
+            else:
+                input_tensor = preprocess_image(active_image)
                 
-            pred_class_idx = int(np.argmax(probs))
-            pred_class_name = config.classes[pred_class_idx]
-            confidence_score = float(probs[pred_class_idx]) * 100.0
-            
-            # Badge selection
-            badge_class = f"badge-{pred_class_name.lower()}"
-            st.markdown(f"""
-            <div class="metric-card">
-                <span class="{badge_class}">{pred_class_name}</span>
-                <h2 style="margin: 0.4rem 0 0.1rem 0; color: #111827;">{confidence_score:.2f}% Confidence</h2>
-                <p style="margin: 0; color: #6B7280; font-size: 0.95rem;">{config.class_descriptions[pred_class_name]}</p>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            # Probability distribution bars
-            st.markdown("##### Prediction Probability Distribution")
-            for cls_name, prob_val in zip(config.classes, probs):
-                st.progress(float(prob_val), text=f"{cls_name}: {prob_val * 100:.2f}%")
+                # Model Inference
+                with torch.no_grad():
+                    logits = model(input_tensor).cpu().numpy()[0]
+                    
+                # Post-hoc Temperature Scaling Calibration
+                probs = calibrator.calibrate_logits(logits)
+                pred_class_idx = int(np.argmax(probs))
+                pred_class_name = config.classes[pred_class_idx]
+                confidence_score = float(probs[pred_class_idx]) * 100.0
                 
-            # Grad-CAM Generation
-            st.markdown("##### Explainable AI (Grad-CAM Biomarker Localization)")
-            cam, _, _ = gradcam.generate_cam(input_tensor, target_class=pred_class_idx)
-            overlay = GradCAM.overlay_heatmap(
-                original_image=active_image,
-                heatmap=cam,
-                alpha=cam_alpha,
-                colormap=cm_map[colormap_choice]
-            )
-            
-            col_cam1, col_cam2 = st.columns(2)
-            with col_cam1:
-                st.image(cam, caption="Raw Activation Heatmap", use_column_width=True, clamp=True)
-            with col_cam2:
-                st.image(overlay, caption="Grad-CAM Anatomic Overlay", use_column_width=True)
+                # High-Sensitivity Urgent Triage Check
+                prob_dict = {cls: float(probs[i]) for i, cls in enumerate(config.classes)}
+                triage_check = calibrator.check_high_sensitivity_referral(probs, config.classes)
                 
-            st.caption("🔴 Red / Warm regions indicate high convolutional feature activation contributing most strongly to the predicted diagnosis.")
+                # 21 CFR Part 11 Audit Trail Logging
+                audit_rec = audit_logger.record_inference(
+                    image_bytes=raw_image_bytes,
+                    model_name=selected_model_name,
+                    iqa_status=iqa_result.status,
+                    iqa_score=iqa_result.quality_score,
+                    prediction=pred_class_name,
+                    confidence=confidence_score,
+                    probabilities=prob_dict,
+                    urgent_flag=triage_check["requires_urgent_retinal_referral"],
+                    operator_id="OP_CLINIC_STATION_01"
+                )
+                
+                # Clinical Triage Alert Banner
+                if triage_check["requires_urgent_retinal_referral"]:
+                    for alert in triage_check["alerts"]:
+                        st.error(f"🚨 **URGENT CLINICAL ALERT:** High probability ({alert['calibrated_probability']*100:.1f}%) of vision-threatening **{alert['condition']}** detected exceeding safety threshold ({alert['clinical_threshold']*100:.0f}%). Immediate retinal specialist review recommended.")
+
+                # Diagnostic Summary Card
+                badge_class = f"badge-{pred_class_name.lower()}"
+                st.markdown(f"""
+                <div class="metric-card">
+                    <span class="{badge_class}">{pred_class_name}</span>
+                    <h2 style="margin: 0.4rem 0 0.1rem 0; color: #111827;">{confidence_score:.2f}% Calibrated Confidence</h2>
+                    <p style="margin: 0; color: #6B7280; font-size: 0.95rem;">{config.class_descriptions[pred_class_name]}</p>
+                    <p style="margin-top: 0.4rem; font-size: 0.78rem; color: #9CA3AF;">Audit Record ID: <code>{audit_rec.audit_id[:13]}...</code> | SHA-256: <code>{audit_rec.image_sha256[:16]}...</code></p>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # Calibrated Probability distribution bars
+                st.markdown("##### Calibrated Risk Distribution")
+                for cls_name, prob_val in zip(config.classes, probs):
+                    st.progress(float(prob_val), text=f"{cls_name}: {prob_val * 100:.2f}%")
+                    
+                # Grad-CAM Generation
+                st.markdown("##### Explainable AI (Grad-CAM Biomarker Localization)")
+                cam, _, _ = gradcam.generate_cam(input_tensor, target_class=pred_class_idx)
+                overlay = GradCAM.overlay_heatmap(
+                    original_image=active_image,
+                    heatmap=cam,
+                    alpha=cam_alpha,
+                    colormap=cm_map[colormap_choice]
+                )
+                
+                col_cam1, col_cam2 = st.columns(2)
+                with col_cam1:
+                    st.image(cam, caption="Raw Feature Activation", use_column_width=True, clamp=True)
+                with col_cam2:
+                    st.image(overlay, caption="Biomarker Localization Overlay", use_column_width=True)
+                    
+                st.caption("🔴 Red / Warm regions indicate highest convolutional gradient activations directly influencing the diagnostic prediction.")
         else:
             st.write("Awaiting image input for classification...")
 
@@ -273,6 +326,32 @@ with tab_pathology:
         ### 4. Normal Retina
         * **Anatomical Integrity:** Symmetrical, concave foveal depression with continuous, well-defined horizontal reflective layers (RNFL, IPL, INL, OPL, ONL, ELM, IS/OS ellipsoid zone, and intact RPE-Bruch's complex).
         """)
+
+with tab_compliance:
+    st.subheader("🛡️ FDA SaMD Regulatory Standards & Electronic Audit Trail")
+    st.markdown("""
+    This system implements key safety mechanisms required for **FDA 510(k) / De Novo clearance** of AI/ML-based Software as a Medical Device (SaMD) in ophthalmology (Product Code: QIC):
+    1. **Automated Image Quality Assessment (IQA):** Pre-analytical gate rejecting ungradable, blurred, or poorly illuminated scans.
+    2. **Clinical Probability Calibration:** Temperature Scaling mitigating deep learning overconfidence.
+    3. **High-Sensitivity Triage Thresholding:** Conservative triggers for sight-threatening fluid accumulation (CNV, DME).
+    4. **21 CFR Part 11 Audit Trail:** Cryptographic SHA-256 fingerprinting and immutable logging for clinical traceability.
+    """)
+    
+    st.markdown("#### Immutable Clinical Audit Trail (Recent Inferences)")
+    audit_file = config.base_dir / "logs" / "audit_trail.jsonl"
+    if audit_file.exists():
+        records = []
+        with open(audit_file, "r", encoding="utf-8") as f:
+            for line in f:
+                if line.strip():
+                    records.append(json.loads(line))
+        if records:
+            df_audit = pd.DataFrame(records)[["audit_id", "timestamp_utc", "image_sha256", "model_name", "iqa_status", "primary_prediction", "calibrated_confidence", "urgent_referral_flag"]]
+            st.dataframe(df_audit.tail(15).iloc[::-1], use_container_width=True)
+        else:
+            st.info("No audit records logged yet. Process an image in the inference tab to initiate records.")
+    else:
+        st.info("No audit trail file generated yet. Inferences will automatically generate records.")
 
 with tab_system:
     st.subheader("System Architecture & Specifications")
