@@ -29,3 +29,17 @@ def test_model_forward_pass_and_shape(model_name):
     params = count_parameters(model)
     assert params["total_parameters"] > 0
     assert params["trainable_parameters"] > 0
+
+
+def test_transfer_learning_strategies():
+    # Feature extraction mode should freeze backbone parameters
+    model_fe, _ = build_model("resnet18", num_classes=4, pretrained=False, strategy="feature_extraction")
+    params_fe = count_parameters(model_fe)
+    assert params_fe["frozen_parameters"] > 0
+    assert params_fe["trainable_parameters"] < params_fe["total_parameters"]
+
+    # Partial finetuning mode
+    model_pf, _ = build_model("resnet18", num_classes=4, pretrained=False, strategy="partial_finetuning")
+    params_pf = count_parameters(model_pf)
+    assert params_pf["frozen_parameters"] > 0
+    assert params_pf["trainable_parameters"] > params_fe["trainable_parameters"]

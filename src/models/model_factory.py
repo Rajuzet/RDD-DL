@@ -18,6 +18,7 @@ def build_model(
     model_name: str,
     num_classes: int = 4,
     pretrained: bool = True,
+    strategy: str = "full_finetuning",
     freeze_backbone: bool = False,
     dropout_rate: float = 0.3
 ) -> Tuple[nn.Module, nn.Module]:
@@ -26,6 +27,9 @@ def build_model(
     """
     normalized_name = model_name.lower().replace("-", "").replace("_", "")
     
+    if freeze_backbone and strategy == "full_finetuning":
+        strategy = "feature_extraction"
+        
     if normalized_name in ["customcnn", "custom"]:
         model = CustomOCTCNN(num_classes=num_classes, dropout_rate=dropout_rate)
         target_layer = model.target_layer_for_gradcam
@@ -35,7 +39,7 @@ def build_model(
             model_name=model_name,
             num_classes=num_classes,
             pretrained=pretrained,
-            freeze_backbone=freeze_backbone,
+            strategy=strategy,
             dropout_rate=dropout_rate
         )
 

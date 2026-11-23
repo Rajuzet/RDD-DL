@@ -288,7 +288,7 @@ with tab_system:
 # Statutory Clinical Disclaimer Box
 st.markdown("""
 <div class="disclaimer-box">
-    <strong>⚠️ STATUTORY MEDICAL & REGULATORY DISCLAIMER:</strong><br>
-    This web application and the underlying deep learning models are developed strictly for research, educational prototyping, and academic demonstration under the GUVI/HCL Capstone curriculum. This software is <strong>NOT</strong> an FDA-cleared, CE-marked, or certified medical diagnostic device. It must never be used as a substitute for professional clinical judgment, expert ophthalmic consultation, or official diagnostic imaging reports.
+    <strong>⚠️ Disclaimer: This application is an educational prototype and not a clinical diagnostic tool.</strong><br>
+    Developed under the GUVI/HCL Capstone Project curriculum for academic research and portfolio demonstration. This software is not an FDA-cleared diagnostic device and must not replace professional clinical evaluation by an ophthalmologist.
 </div>
 """, unsafe_allow_html=True)

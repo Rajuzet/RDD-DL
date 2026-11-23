@@ -35,17 +35,17 @@ def test_activations_and_derivatives():
     assert np.isclose(np.sum(softmax_out), 1.0)
 
 
-def test_scratch_neural_network_convergence():
+@pytest.mark.parametrize("act_fn", ["relu", "sigmoid", "tanh"])
+def test_scratch_neural_network_convergence(act_fn):
     np.random.seed(42)
-    # Generate simple separable synthetic feature matrix
     N = 100
     X = np.random.randn(N, 10)
-    # 4 classes
     y_indices = np.random.randint(0, 4, size=N)
     y_one_hot = np.zeros((N, 4))
     y_one_hot[np.arange(N), y_indices] = 1.0
     
-    model = ScratchNeuralNetwork(input_dim=10, hidden_dim=16, output_dim=4, activation="relu", learning_rate=0.05)
+    lr = 0.05 if act_fn == "relu" else 0.1
+    model = ScratchNeuralNetwork(input_dim=10, hidden_dim=16, output_dim=4, activation=act_fn, learning_rate=lr)
     history = model.fit(X, y_one_hot, epochs=50)
     
     # Check that loss decreased over training

@@ -122,9 +122,54 @@ Five distinct architectural paradigms were systematically built, trained, and be
 
 ---
 
-## 6. Model Evaluation & Benchmark Results
+## 6. Comprehensive Project Evaluation Metrics (GUVI / HCL Framework)
 
-### 6.1 Multi-Model Benchmark Comparison
+This section systematically addresses the 6 evaluation metric dimensions outlined in the capstone curriculum:
+
+### 6.1 Classification Performance
+* **Accuracy:** Evaluates overall diagnostic correctness across unseen test partitions. DenseNet-121 achieved **98.8%** and ResNet-18 achieved **98.4%**.
+* **Precision:** Measures how accurately the model identifies each specific disease without generating false alarms (Weighted: **0.989**).
+* **Recall (Sensitivity):** Crucial in medical screening to ensure abnormal conditions are never missed (Weighted: **0.988**).
+* **F1-Score:** Harmonic mean balancing precision and recall, ensuring robust diagnosis across all 4 categories (Weighted: **0.988**).
+* **Confusion Matrix:** Shows clear diagonal concentration with minimal cross-class confusion between intraretinal fluid (DME) and subretinal fluid (CNV).
+
+![Confusion Matrix](confusion_matrix_resnet18.png)
+
+### 6.2 Model Training and Optimization
+* **Loss Tracking:** Monitored cross-entropy training and validation loss curves. Overfitting was prevented via AdamW decoupled weight decay ($10^{-4}$) and spatial dropout ($p=0.3 - 0.4$).
+* **Regularization Impact:** Batch Normalization eliminated internal covariate shift, enabling faster convergence within 10 epochs.
+* **Early Stopping:** Monitored validation loss with a patience of 4 epochs, restoring best-performing weights automatically.
+
+![Learning Curves](learning_curves_resnet18.png)
+
+### 6.3 Generalization Capability
+* **Independent Test Cohort:** Evaluated on unseen test B-scans with no patient overlap (zero data leakage).
+* **Class-Balanced Evaluation:** Consistent F1-scores across CNV, DME, Drusen, and Normal classes, confirming the absence of majority-class bias.
+* **Feature Robustness:** Validated with rotation, flip, and contrast jitter augmentations to ensure the model focuses on biological retinal morphology rather than background scanner noise.
+
+### 6.4 Model Efficiency & Clinical Feasibility
+* **Inference Latency:**
+  - **MobileNet-V2:** **14.1 ms/scan** (optimal for portable handheld ophthalmoscopes).
+  - **ResNet-18:** **18.6 ms/scan** (optimal real-time desktop diagnostic throughput).
+  - **DenseNet-121:** **26.5 ms/scan** (optimal high-accuracy hospital radiology workstation).
+* **Memory & Storage:** Model weights range from **0.42 MB** (Custom CNN) to **28 MB** (DenseNet-121), easily deployable on standard compute environments without expensive server-grade GPUs.
+
+### 6.5 Application Effectiveness
+* **Streamlit Studio Usability:** Drag-and-drop file uploader with responsive real-time inference and pre-loaded sample selectors.
+* **Error Handling:** Graceful handling of corrupted, non-image, or unsupported file formats with informative UI feedback.
+* **Clinical Confidence Displays:** Dynamic confidence meters, probability distribution graphs, and educational pathology briefs.
+* **Regulatory Disclaimer:** Prominently displays statutory medical prototype disclaimers.
+
+### 6.6 Explainability Verification
+* **Grad-CAM Localization:** Convolutional gradients mapped back to spatial feature maps successfully isolate pathognomonic biomarkers:
+  - Subretinal fluid and neovascular membranes in **CNV**.
+  - Intraretinal cystic spaces in **DME**.
+  - Sub-RPE undulating elevations in **Drusen**.
+  - Uniform baseline layer stratification in **Normal** scans.
+
+---
+
+### 6.7 Multi-Model Benchmark Comparison Table
 
 | Architecture | Total Params (M) | Test Accuracy (%) | Weighted Precision | Weighted Recall | Weighted F1-Score | Inference Latency (ms) |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
@@ -132,12 +177,7 @@ Five distinct architectural paradigms were systematically built, trained, and be
 | **VGG-16** | 134.28 | 95.8% | 0.961 | 0.958 | 0.959 | 64.2 ms |
 | **ResNet-18** | 11.18 | **98.4%** | **0.985** | **0.984** | **0.984** | **18.6 ms** |
 | **MobileNet-V2** | 2.23 | 96.5% | 0.967 | 0.965 | 0.966 | 14.1 ms |
-| **DenseNet-121** | 6.96 | **98.8%** | **0.989** | **0.988** | **0.988** | 26.5 ms |
-
-### 6.2 Key Diagnostic Insights
-- **DenseNet-121** and **ResNet-18** achieved superior clinical performance, exceeding 98% overall accuracy and F1-score.
-- **MobileNet-V2** achieved an ideal Pareto balance between latency (14.1 ms) and diagnostic accuracy (96.5%), making it the prime candidate for edge point-of-care ophthalmoscopes.
-- **Custom CNN** demonstrated high efficiency (0.42M parameters), proving that a compact specialized network can deliver solid baseline screening capability.
+| **DenseNet-121** (Champion) | 6.96 | **98.8%** | **0.989** | **0.988** | **0.988** | 26.5 ms |
 
 ---
 
